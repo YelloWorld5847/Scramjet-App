@@ -75,11 +75,10 @@ async function go() {
 		"/wisp/";
 
 	try {
-		if ((await connection.getTransport()) !== "/libcurl/index.mjs") {
-			await connection.setTransport("/libcurl/index.mjs", [
-				{ websocket: wispUrl },
-			]);
-		}
+		// on le remet a chaque fois, sinon si il a planté une fois il reste cassé
+		await connection.setTransport("/libcurl/index.mjs", [
+			{ websocket: wispUrl },
+		]);
 	} catch (err) {
 		showErr("Impossible de lancer le transport.", err.toString());
 		return;
