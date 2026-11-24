@@ -34,15 +34,36 @@ scramjet.init();
 
 const connection = new BareMux.BareMuxConnection("/baremux/worker.js");
 
-form.addEventListener("submit", async (event) => {
-	event.preventDefault();
+function showErr(msg, code) {
+	error.textContent = msg;
+	errorCode.textContent = code || "";
+}
+
+// sur certain navigateur mobile y'a pas de SharedWorker et bare-mux plante sans rien dire
+window.addEventListener("error", (e) => showErr("Erreur", String(e.message)));
+window.addEventListener("unhandledrejection", (e) =>
+	showErr("Erreur", String(e.reason))
+);
+
+async function go() {
+	showErr("");
+	if (!address.value.trim()) return;
+
+	if (typeof SharedWorker === "undefined") {
+		showErr(
+			"Navigateur pas compatible (pas de SharedWorker).",
+			"mets a jour chrome ou prend firefox / safari"
+		);
+		return;
+	}
 
 	try {
 		await registerSW();
+		// le sw doit controler la page sinon le 1er chargement passe pas
+		await navigator.serviceWorker.ready;
 	} catch (err) {
-		error.textContent = "Failed to register service worker.";
-		errorCode.textContent = err.toString();
-		throw err;
+		showErr("Failed to register service worker.", err.toString());
+		return;
 	}
 
 	const url = search(address.value, searchEngine.value);
@@ -52,13 +73,32 @@ form.addEventListener("submit", async (event) => {
 		"://" +
 		location.host +
 		"/wisp/";
-	if ((await connection.getTransport()) !== "/libcurl/index.mjs") {
-		await connection.setTransport("/libcurl/index.mjs", [
-			{ websocket: wispUrl },
-		]);
+
+	try {
+		if ((await connection.getTransport()) !== "/libcurl/index.mjs") {
+			await connection.setTransport("/libcurl/index.mjs", [
+				{ websocket: wispUrl },
+			]);
+		}
+	} catch (err) {
+		showErr("Impossible de lancer le transport.", err.toString());
+		return;
 	}
-	const frame = scramjet.createFrame();
-	frame.frame.id = "sj-frame";
-	document.body.appendChild(frame.frame);
-	frame.go(url);
+
+	let frame = document.getElementById("sj-frame");
+	if (frame) frame.remove();
+	const f = scramjet.createFrame();
+	f.frame.id = "sj-frame";
+	document.body.appendChild(f.frame);
+	f.go(url);
+}
+
+form.addEventListener("submit", (event) => {
+	event.preventDefault();
+	go();
+});
+
+document.getElementById("sj-go").addEventListener("click", (e) => {
+	e.preventDefault();
+	go();
 });
