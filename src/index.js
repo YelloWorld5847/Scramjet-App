@@ -1,4 +1,6 @@
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "url";
 import { hostname } from "node:os";
 import { server as wisp, logging } from "@mercuryworkshop/wisp-js/server";
@@ -44,6 +46,16 @@ fastify.register(fastifyStatic, {
 	root: scramjetPath,
 	prefix: "/scram/",
 	decorateReply: false,
+});
+
+// fix libcurl: sur tel le wasm est pas encore chargé quand init() est appelé
+// du coup "wasm not loaded yet", on attend qu'il soit pret avant de creer la session
+const libcurlFix = readFileSync(join(libcurlPath, "index.mjs"), "utf8").replace(
+	"libcurl.set_websocket(this.wisp);",
+	'libcurl.set_websocket(this.wisp);\n    if (!libcurl.ready) await new Promise((r) => libcurl.events.addEventListener("libcurl_load", r, { once: true }));'
+);
+fastify.get("/libcurl/index.mjs", (req, reply) => {
+	reply.type("application/javascript").send(libcurlFix);
 });
 
 fastify.register(fastifyStatic, {
