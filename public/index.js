@@ -45,6 +45,27 @@ window.addEventListener("unhandledrejection", (e) =>
 	showErr("Erreur", String(e.reason))
 );
 
+const wispUrl =
+	(location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "/wisp/";
+
+// on prepare le sw + le transport une seule fois au chargement de la page
+// avant je le remettais a chaque recherche et ça cassait les requetes en cours (no bare clients)
+let ready = null;
+function prepare() {
+	if (!ready) {
+		ready = (async () => {
+			await registerSW();
+			await navigator.serviceWorker.ready;
+			await connection.setTransport("/libcurl/index.mjs", [
+				{ websocket: wispUrl },
+			]);
+		})();
+		ready.catch(() => (ready = null));
+	}
+	return ready;
+}
+if (typeof SharedWorker !== "undefined") prepare();
+
 async function go() {
 	showErr("");
 	if (!address.value.trim()) return;
@@ -58,31 +79,13 @@ async function go() {
 	}
 
 	try {
-		await registerSW();
-		// le sw doit controler la page sinon le 1er chargement passe pas
-		await navigator.serviceWorker.ready;
+		await prepare();
 	} catch (err) {
-		showErr("Failed to register service worker.", err.toString());
+		showErr("Impossible de lancer le proxy.", err.toString());
 		return;
 	}
 
 	const url = search(address.value, searchEngine.value);
-
-	let wispUrl =
-		(location.protocol === "https:" ? "wss" : "ws") +
-		"://" +
-		location.host +
-		"/wisp/";
-
-	try {
-		// on le remet a chaque fois, sinon si il a planté une fois il reste cassé
-		await connection.setTransport("/libcurl/index.mjs", [
-			{ websocket: wispUrl },
-		]);
-	} catch (err) {
-		showErr("Impossible de lancer le transport.", err.toString());
-		return;
-	}
 
 	let frame = document.getElementById("sj-frame");
 	if (frame) frame.remove();
